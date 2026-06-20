@@ -8,6 +8,7 @@ def _not_implemented(s, name):
 class Module:
     def __init__(self):
         self.cache = None
+        self.what_to_save = None
 
     def cache_value(self, value):
         self.cache = value
@@ -17,6 +18,17 @@ class Module:
     
     def backward(self, grad, learning_rate):
         _not_implemented(self, "backward")
+    
+    def what_to_save(self):
+        return None
+
+    def save(self, path):
+        np.savez(path, **self.what_to_save())
+    
+    def load(self, path):
+        data = np.load(path)
+        self.weights = data["weights"]
+        self.biases = data["biases"]
 
 class Linear(Module):
     def __init__(self, ins, outs):
@@ -34,6 +46,9 @@ class Linear(Module):
         self.weights -= learning_rate * grad[:, np.newaxis] * self.cache[np.newaxis, :]
         self.biases -= learning_rate * grad
         return result
+
+    def what_to_save(self):
+        return {"weights": self.weights, "biases": self.biases}
 
 class ReLU(Module):
     def __init__(self):

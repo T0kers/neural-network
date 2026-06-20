@@ -22,22 +22,23 @@ class NeuralNetwork(nn.Module):
     def backward(self, grad, learning_rate):
         return self.network.backward(grad, learning_rate)
     
-    def train(self, learning_rate, training_inputs, training_targets):
-        i = 0
-        indexes = np.arange(len(training_inputs))
+    def train(self, learning_rate, training_inputs, training_targets, N_epoch=1000):
+        epoch_index = np.arange(N_epoch)
+        epoch_losses = np.zeros(N_epoch)
+
         losses = np.zeros(len(training_inputs))
         training_inputs = np.reshape(training_inputs, (training_inputs.shape[0], np.prod(training_inputs.shape[1:])))
-        for x, target in zip(training_inputs, training_targets):
-            prediction = self.forward(x)
-            loss = self.loss_fn.eval(prediction, target)
-            losses[i] = loss
-            grad = self.loss_fn.grad(prediction, target)
-            self.backward(grad, learning_rate)
-            # if i % 100 == 0:
-            #     print(f"{i}: ", loss, prediction)
-            i += 1
-        print("Final:", loss, prediction)
-        return indexes, losses
+        for epoch in range(N_epoch):
+            for i, (x, target) in enumerate(zip(training_inputs, training_targets)):
+                prediction = self.forward(x)
+                loss = self.loss_fn.eval(prediction, target)
+                losses[i] = loss
+                grad = self.loss_fn.grad(prediction, target)
+                self.backward(grad, learning_rate)
+            epoch_loss = np.mean(losses)
+            epoch_losses[epoch] = epoch_loss
+            print(f"Epoch {epoch}:", epoch_loss)
+        return epoch_index, epoch_losses
 
 training_inputs = load_data.load_data("mnist_data/t10k-images.idx3-ubyte")
 training_labels = load_data.load_labels("mnist_data/t10k-labels.idx1-ubyte")
