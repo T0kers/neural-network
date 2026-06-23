@@ -1,34 +1,35 @@
 import numpy as np
+from abc import ABC, abstractmethod
 
-def _not_implemented(s, name):
-    raise NotImplementedError(
-        f"{type(s).__name__} must implement {name}()"
-    )
-
-class Module:
+class Module(ABC):
     def __init__(self):
         self.cache = None
-        self.what_to_save = None
 
     def cache_value(self, value):
         self.cache = value
 
+    @abstractmethod
     def forward(self, x):
-        _not_implemented(self, "forward")
+        pass
     
+    @abstractmethod
     def backward(self, grad, learning_rate):
-        _not_implemented(self, "backward")
+        pass
     
-    def what_to_save(self):
-        return None
+    # This can be overridden by classes that inherit Module
+    def state_dict(self):
+        return {}
+    
+    # This can be overridden by classes that inherit Module
+    def load_state_dict(self, state):
+        pass
 
     def save(self, path):
-        np.savez(path, **self.what_to_save())
+        np.savez(path, **self.state_dict())
     
     def load(self, path):
-        data = np.load(path)
-        self.weights = data["weights"]
-        self.biases = data["biases"]
+        with np.load(path) as data:
+            self.load_state_dict(dict(data))
 
 class Linear(Module):
     def __init__(self, ins, outs):
@@ -47,54 +48,59 @@ class Linear(Module):
         self.biases -= learning_rate * grad
         return result
 
-    def what_to_save(self):
+    def state_dict(self):
         return {"weights": self.weights, "biases": self.biases}
+    
+    def load_state_dict(self, state):
+        self.weights = state["weights"]
+        self.biases = state["biases"]
 
 class ReLU(Module):
-    def __init__(self):
+    def __init__(self, ins):
         super().__init__()
+
+        self.cache = np.zeros(ins)
     
     def forward(self, z):
-        self.cache_value(z)
-        return np.maximum(0, z)
+        np.maximum(0, z, out=self.cache)
+        return self.cache
     
     def backward(self, grad, learning_rate):
-        z = self.cache
-        mask = z < 0
-        z[mask] = 0
-        z[~mask] = 1
-        return z * grad
+        return (self.cache > 0) * grad
 
 class Sigmoid(Module):
-    def __init__(self):
+    def __init__(self, ins):
         super().__init__()
+
+        self.cache = np.zeros(ins)
     
     def forward(self, z):
-        a = 1 / (1 + np.exp(-z))
-        self.cache_value(a)
-        return a
+        np.reciprocal(1 + np.exp(-z), out=self.cache)
+        return self.cache
     
     def backward(self, grad, learning_rate):
         return (self.cache * (1 - self.cache)) * grad
 
 # https://parasdahal.com/softmax-crossentropy/
 class Softmax(Module):
-    def __init__(self, using_cross_entropy_loss):
+    def __init__(self, ins, using_cross_entropy_loss):
         super().__init__()
-    
-        if using_cross_entropy_loss:
-            self.backward = lambda grad, learning_rate: grad
-        else:
-            self.backward = lambda grad, learning_rate: (self.cache[:, np.newaxis] * (np.eye(4) - self.cache)) @ grad
+        
+        self.cache = np.zeros(ins)
+        self.using_cross_entropy_loss = using_cross_entropy_loss
     
     def forward(self, z):
         expz = np.exp(z - np.max(z))
-        a = expz / np.sum(expz)
-        self.cache_value(a)
-        return a
+        np.divide(expz, np.sum(expz), out=self.cache)
+        return self.cache
     
-    # def backward(self, grad, learning_rate):
-    #     return (self.cache[:, np.newaxis] * (np.eye(4) - self.cache)) @ grad
+    def backward(self, grad, learning_rate):
+        if self.using_cross_entropy_loss:
+            return grad
+
+        n = len(self.cache)
+        jacobian = self.cache[:, None] * (np.eye(n) - self.cache)
+        return jacobian @ grad
 
 class Sequential(Module):
     def __init__(self, layers):
@@ -110,6 +116,18 @@ class Sequential(Module):
         for layer in reversed(self.layers):
             grad = layer.backward(grad, learning_rate)
         return grad
+    
+    def state_dict(self):
+        state = {}
+        for i, layer in enumerate(self.layers):
+            for key, value in layer.state_dict().items():
+                state[f"layer{i}.{key}"] = value
+        return state
+    
+    def load_state_dict(self, state):
+        for i, layer in enumerate(self.layers):
+            prefix = f"layer{i}."
+            layer.load_state_dict({key[len(prefix):]: val for key, val in state.items() if key.startswith(prefix)})
 
 class LossFn:
     def __init__(self):

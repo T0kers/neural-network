@@ -31,6 +31,7 @@ def load_data(path):
 
     return training_data
 
+# data: https://web.archive.org/web/20200430193701/http://yann.lecun.com/exdb/mnist/
 
 if __name__ == "__main__":
     training_inputs = load_data("mnist_data/t10k-images.idx3-ubyte")
