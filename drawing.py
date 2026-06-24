@@ -36,15 +36,19 @@ import tkinter as tk
 from PIL import Image, ImageTk
 import numpy as np
 
+import load_mnist
+
 dim = 28
 canvas_size = 600
 cell_size = canvas_size // dim
 
-img_data = np.zeros((dim, dim))
+training_inputs = load_mnist.load_data("mnist_data/t10k-images.idx3-ubyte")
+img_data = training_inputs[1] / 255
+#img_data = np.zeros((dim, dim))
 
 root = tk.Tk()
 
-c = tk.Canvas(root, height=600, width=1000, bg='white')
+c = tk.Canvas(root, height=600, width=1000, bg='gray')
 c.pack(fill=tk.BOTH, expand=True)
 
 img_id = None  # canvas image handle
@@ -92,16 +96,43 @@ def paint(event):
 
     render()
 
+
+def lin_paint_fallof(x):
+    return np.maximum(0, -0.002 * cell_size * x + 1)
+
+def gauss_paint_fallof(x):
+    sigma = 0.5 * cell_size
+    return np.exp(-0.45 * (x / sigma)**2) / 2
+
+
+def paint2(event):
+    global img_data
+
+    x = event.x
+    y = event.y
+
+    dist = np.arange(dim) * cell_size + cell_size / 2
+
+    dist_map = np.sqrt((dist - x)**2 + ((dist - y)**2)[:, np.newaxis])
+    modify = gauss_paint_fallof(dist_map)
+
+    img_data += modify
+    img_data = np.minimum(1, img_data)
+
+    render()
+
 def clear(event=None):
     global img_data
     img_data.fill(0)
     render()
 
-c.bind("<B1-Motion>", paint)
-c.bind("<Button-1>", paint)
+c.bind("<B1-Motion>", paint2)
+c.bind("<Button-1>", paint2)
 
 # c.bind('<Configure>', create_grid)
 # c.bind('<Configure>', create_grid)
 root.bind("c", clear)
+
+render()
 
 root.mainloop()
